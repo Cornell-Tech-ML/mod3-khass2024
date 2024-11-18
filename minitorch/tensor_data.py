@@ -98,6 +98,7 @@ def broadcast_index(
             out_index[i] = big_index[i + (len(big_shape) - len(shape))]
         else:
             out_index[i] = 0
+    return None
     # END ASSIGN2.2
 
 
