@@ -169,7 +169,31 @@ def tensor_map(
         in_strides: Strides,
     ) -> None:
         # TODO: Implement for Task 3.1.
-        raise NotImplementedError("Need to implement for Task 3.1")
+        # Check if tensors are stride-aligned
+        is_stride_aligned = True
+        for i in range(len(out_shape)):
+            if i < len(in_shape):
+                if out_strides[i] != in_strides[i] or out_shape[i] != in_shape[i]:
+                    is_stride_aligned = False
+                    break
+            else:
+                is_stride_aligned = False
+                break
+
+        # Fast path for stride-aligned case
+        if is_stride_aligned:
+            for i in prange(len(out)):
+                out[i] = fn(in_storage[i])
+        # Regular path using indices
+        else:
+            out_index = np.zeros(MAX_DIMS, np.int32)
+            in_index = np.zeros(MAX_DIMS, np.int32)
+            for i in prange(len(out)):
+                to_index(i, out_shape, out_index)
+                broadcast_index(out_index, out_shape, in_shape, in_index)
+                o = index_to_position(out_index, out_strides)
+                j = index_to_position(in_index, in_strides)
+                out[o] = fn(in_storage[j])
 
     return njit(_map, parallel=True)  # type: ignore
 
@@ -209,7 +233,37 @@ def tensor_zip(
         b_strides: Strides,
     ) -> None:
         # TODO: Implement for Task 3.1.
-        raise NotImplementedError("Need to implement for Task 3.1")
+        # Check if tensors are stride-aligned
+        is_stride_aligned = True
+        for i in range(len(out_shape)):
+            if i < len(a_shape) and i < len(b_shape):
+                if (out_strides[i] != a_strides[i] or 
+                    out_strides[i] != b_strides[i] or
+                    out_shape[i] != a_shape[i] or 
+                    out_shape[i] != b_shape[i]):
+                    is_stride_aligned = False
+                    break
+            else:
+                is_stride_aligned = False
+                break
+
+        # Fast path for stride-aligned case
+        if is_stride_aligned:
+            for i in prange(len(out)):
+                out[i] = fn(a_storage[i], b_storage[i])
+        # Regular path using indices
+        else:
+            out_index = np.zeros(MAX_DIMS, np.int32)
+            a_index = np.zeros(MAX_DIMS, np.int32)
+            b_index = np.zeros(MAX_DIMS, np.int32)
+            for i in prange(len(out)):
+                to_index(i, out_shape, out_index)
+                o = index_to_position(out_index, out_strides)
+                broadcast_index(out_index, out_shape, a_shape, a_index)
+                j = index_to_position(a_index, a_strides)
+                broadcast_index(out_index, out_shape, b_shape, b_index)
+                k = index_to_position(b_index, b_strides)
+                out[o] = fn(a_storage[j], b_storage[k])
 
     return njit(_zip, parallel=True)  # type: ignore
 
@@ -245,7 +299,30 @@ def tensor_reduce(
         reduce_dim: int,
     ) -> None:
         # TODO: Implement for Task 3.1.
-        raise NotImplementedError("Need to implement for Task 3.1")
+        out_index = np.zeros(MAX_DIMS, np.int32)
+        a_index = np.zeros(MAX_DIMS, np.int32)
+        reduce_size = a_shape[reduce_dim]
+        
+        for i in prange(len(out)):
+            # Calculate output position
+            to_index(i, out_shape, out_index)
+            o = index_to_position(out_index, out_strides)
+            
+            # Copy output index to a_index for reduction
+            for d in range(len(out_shape)):
+                a_index[d] = out_index[d]
+                
+            # Local accumulator to avoid global writes in inner loop
+            acc = out[o]
+            
+            # Inner reduction loop
+            for s in range(reduce_size):
+                a_index[reduce_dim] = s
+                j = index_to_position(a_index, a_strides)
+                acc = fn(acc, a_storage[j])
+                
+            # Single write back of accumulated result
+            out[o] = acc
 
     return njit(_reduce, parallel=True)  # type: ignore
 
