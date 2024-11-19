@@ -169,26 +169,13 @@ def tensor_map(
         in_strides: Strides,
     ) -> None:
         # TODO: Implement for Task 3.1.
-        # Check if tensors are stride-aligned
-        is_stride_aligned = True
-        for i in range(len(out_shape)):
-            if i < len(in_shape):
-                if out_strides[i] != in_strides[i] or out_shape[i] != in_shape[i]:
-                    is_stride_aligned = False
-                    break
-            else:
-                is_stride_aligned = False
-                break
-
-        # Fast path for stride-aligned case
-        if is_stride_aligned:
+        if np.array_equal(in_strides, out_strides) and np.array_equal(in_shape, out_shape):
             for i in prange(len(out)):
                 out[i] = fn(in_storage[i])
-        # Regular path using indices
-        else:
-            out_index = np.zeros(MAX_DIMS, np.int32)
-            in_index = np.zeros(MAX_DIMS, np.int32)
+        else: 
             for i in prange(len(out)):
+                out_index: Index = np.zeros(MAX_DIMS, dtype=np.int32)
+                in_index: Index = np.zeros(MAX_DIMS, dtype=np.int32)
                 to_index(i, out_shape, out_index)
                 broadcast_index(out_index, out_shape, in_shape, in_index)
                 o = index_to_position(out_index, out_strides)
