@@ -271,29 +271,20 @@ def tensor_reduce(
         reduce_dim: int,
     ) -> None:
         # TODO: Implement for Task 3.1.
-        out_index = np.zeros(MAX_DIMS, np.int32)
-        a_index = np.zeros(MAX_DIMS, np.int32)
-        reduce_size = a_shape[reduce_dim]
-        
         for i in prange(len(out)):
-            # Calculate output position
+            out_index: Index = np.zeros(MAX_DIMS, dtype=np.int32)
+            reduce_size = a_shape[reduce_dim]
             to_index(i, out_shape, out_index)
             o = index_to_position(out_index, out_strides)
             
-            # Copy output index to a_index for reduction
-            for d in range(len(out_shape)):
-                a_index[d] = out_index[d]
-                
-            # Local accumulator to avoid global writes in inner loop
-            acc = out[o]
+            # Calculate base position for a_storage
+            base_position = index_to_position(out_index, a_strides)
+            reduce_stride = a_strides[reduce_dim]
             
-            # Inner reduction loop
+            # Inner loop only does computation, no function calls
+            acc = out[o]
             for s in range(reduce_size):
-                a_index[reduce_dim] = s
-                j = index_to_position(a_index, a_strides)
-                acc = fn(acc, a_storage[j])
-                
-            # Single write back of accumulated result
+                acc = fn(acc, a_storage[base_position + s * reduce_stride])
             out[o] = acc
 
     return njit(_reduce, parallel=True)  # type: ignore
