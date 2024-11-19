@@ -220,30 +220,15 @@ def tensor_zip(
         b_strides: Strides,
     ) -> None:
         # TODO: Implement for Task 3.1.
-        # Check if tensors are stride-aligned
-        is_stride_aligned = True
-        for i in range(len(out_shape)):
-            if i < len(a_shape) and i < len(b_shape):
-                if (out_strides[i] != a_strides[i] or 
-                    out_strides[i] != b_strides[i] or
-                    out_shape[i] != a_shape[i] or 
-                    out_shape[i] != b_shape[i]):
-                    is_stride_aligned = False
-                    break
-            else:
-                is_stride_aligned = False
-                break
-
-        # Fast path for stride-aligned case
-        if is_stride_aligned:
+        if (np.array_equal(a_strides, out_strides) and np.array_equal(a_shape, out_shape)
+            and np.array_equal(b_strides, out_strides) and np.array_equal(b_shape, out_shape)):
             for i in prange(len(out)):
                 out[i] = fn(a_storage[i], b_storage[i])
-        # Regular path using indices
-        else:
-            out_index = np.zeros(MAX_DIMS, np.int32)
-            a_index = np.zeros(MAX_DIMS, np.int32)
-            b_index = np.zeros(MAX_DIMS, np.int32)
+        else: 
             for i in prange(len(out)):
+                out_index: Index  = np.zeros(MAX_DIMS, dtype=np.int32)
+                a_index: Index = np.zeros(MAX_DIMS, dtype=np.int32)
+                b_index: Index = np.zeros(MAX_DIMS, dtype=np.int32)
                 to_index(i, out_shape, out_index)
                 o = index_to_position(out_index, out_strides)
                 broadcast_index(out_index, out_shape, a_shape, a_index)
@@ -251,7 +236,7 @@ def tensor_zip(
                 broadcast_index(out_index, out_shape, b_shape, b_index)
                 k = index_to_position(b_index, b_strides)
                 out[o] = fn(a_storage[j], b_storage[k])
-
+           
     return njit(_zip, parallel=True)  # type: ignore
 
 
