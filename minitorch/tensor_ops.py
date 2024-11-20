@@ -41,7 +41,33 @@ class TensorOps:
     @staticmethod
     def reduce(
         fn: Callable[[float, float], float], start: float = 0.0
-    ) -> Callable[[Tensor, int], Tensor]: ...
+    ) -> Callable[["Tensor", int], "Tensor"]:
+        """Higher-order tensor reduce function. ::
+
+          fn_reduce = reduce(fn)
+          out = fn_reduce(a, dim)
+
+        Simple version ::
+
+            for j:
+                out[1, j] = start
+                for i:
+                    out[1, j] = fn(out[1, j], a[i, j])
+
+
+        Args:
+        ----
+            fn: function from two floats-to-float to apply
+            start: initial value for the reduction operation
+            a (:class:`TensorData`): tensor to reduce over
+            dim (int): int of dim to reduce
+
+        Returns:
+        -------
+            :class:`TensorData` : new tensor
+
+        """
+        ...
 
     @staticmethod
     def matrix_multiply(a: Tensor, b: Tensor) -> Tensor:
@@ -57,10 +83,12 @@ class TensorBackend:
         that implements map, zip, and reduce higher-order functions.
 
         Args:
+        ----
             ops : tensor operations object see `tensor_ops.py`
 
 
         Returns:
+        -------
             A collection of tensor functions
 
         """
@@ -112,12 +140,14 @@ class SimpleOps(TensorOps):
                     out[i, j] = fn(a[i, 0])
 
         Args:
+        ----
             fn: function from float-to-float to apply.
             a (:class:`TensorData`): tensor to map over
             out (:class:`TensorData`): optional, tensor data to fill in,
                    should broadcast with `a`
 
         Returns:
+        -------
             new tensor data
 
         """
@@ -154,11 +184,13 @@ class SimpleOps(TensorOps):
 
 
         Args:
+        ----
             fn: function from two floats-to-float to apply
             a (:class:`TensorData`): tensor to zip over
             b (:class:`TensorData`): tensor to zip over
 
         Returns:
+        -------
             :class:`TensorData` : new tensor data
 
         """
@@ -193,11 +225,14 @@ class SimpleOps(TensorOps):
 
 
         Args:
+        ----
             fn: function from two floats-to-float to apply
+            start: starting value for reduction
             a (:class:`TensorData`): tensor to reduce over
             dim (int): int of dim to reduce
 
         Returns:
+        -------
             :class:`TensorData` : new tensor
 
         """
@@ -244,6 +279,7 @@ def tensor_map(fn: Callable[[float], float]) -> Any:
       broadcast. (`in_shape` must be smaller than `out_shape`).
 
     Args:
+    ----
         fn: function from float-to-float to apply
         out (array): storage for out tensor
         out_shape (array): shape for out tensor
@@ -253,6 +289,7 @@ def tensor_map(fn: Callable[[float], float]) -> Any:
         in_strides (array): strides for in tensor
 
     Returns:
+    -------
         None: Fills in 'out'
 
     """
@@ -296,6 +333,7 @@ def tensor_zip(fn: Callable[[float, float], float]) -> Any:
       and `b_shape` broadcast to `out_shape`.
 
     Args:
+    ----
         fn: function mapping two floats to float to apply
         out (array): storage for 'out' tensor
         out_shape (array): shape for 'out' tensor
@@ -308,8 +346,9 @@ def tensor_zip(fn: Callable[[float, float], float]) -> Any:
         b_strides (array): strides for 'b' tensor
 
     Returns:
+    -------
         None : Fills in 'out'
-    
+
     """
 
     def _zip(
@@ -347,6 +386,7 @@ def tensor_reduce(fn: Callable[[float, float], float]) -> Any:
        except with `reduce_dim` turned to size `1`
 
     Args:
+    ----
         fn: reduction function mapping two floats to float
         out (array): storage for 'out' tensor
         out_shape (array): shape for 'out' tensor
@@ -357,6 +397,7 @@ def tensor_reduce(fn: Callable[[float, float], float]) -> Any:
         reduce_dim (int): dimension to reduce out
 
     Returns:
+    -------
         None : Fills in 'out'
 
     """
