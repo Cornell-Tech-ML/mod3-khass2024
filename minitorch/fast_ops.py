@@ -337,7 +337,38 @@ def _tensor_matrix_multiply(
     b_batch_stride = b_strides[0] if b_shape[0] > 1 else 0
 
     # TODO: Implement for Task 3.2.
-    raise NotImplementedError("Need to implement for Task 3.2")
+    out_batch_stride = out_strides[0] if out_shape[0] > 1 else 0
+
+    batch_size = max(out_shape[0], 1)
+    rows = out_shape[-2]
+    cols = out_shape[-1]
+    common_dim = a_shape[-1]  # a_shape[-1] == b_shape[-2]
+
+    for n in prange(batch_size):
+        for i in range(rows):
+            for j in range(cols):
+                sum_result = 0.0
+                for k in range(common_dim):
+                    # Calculate flat indices for a, b, and out
+                    a_idx = (
+                        n * a_batch_stride
+                        + i * a_strides[-2]
+                        + k * a_strides[-1]
+                    )
+                    b_idx = (
+                        n * b_batch_stride
+                        + k * b_strides[-2]
+                        + j * b_strides[-1]
+                    )
+                    sum_result += a_storage[a_idx] * b_storage[b_idx]
+
+                # Calculate index for out
+                out_idx = (
+                    n * out_batch_stride
+                    + i * out_strides[-2]
+                    + j * out_strides[-1]
+                )
+                out[out_idx] = sum_result
 
 
 tensor_matrix_multiply = njit(_tensor_matrix_multiply, parallel=True)
