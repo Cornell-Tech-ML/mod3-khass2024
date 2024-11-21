@@ -614,10 +614,10 @@ def _tensor_matrix_multiply(
         None : Fills in `out`
     """
     # Commented out for now to avoid style issues
-    # a_batch_stride = a_strides[0] if a_shape[0] > 1 else 0
-    # b_batch_stride = b_strides[0] if b_shape[0] > 1 else 0
+    a_batch_stride = a_strides[0] if a_shape[0] > 1 else 0
+    b_batch_stride = b_strides[0] if b_shape[0] > 1 else 0
     # # Batch dimension - fixed
-    # batch = cuda.blockIdx.z
+    batch = cuda.blockIdx.z
 
     BLOCK_DIM = 32
     a_shared = cuda.shared.array((BLOCK_DIM, BLOCK_DIM), numba.float64)
@@ -638,17 +638,32 @@ def _tensor_matrix_multiply(
     #    c) Compute the dot produce for position c[i, j]
     # TODO: Implement for Task 3.4.
     acc = 0
-    for k in range(0, out_size, BLOCK_DIM):
-        if i < out_size and k + pj < out_size:
-            a_shared[pi, pj] = a_storage[i, k + pj]
-        if j < out_size and k + pi < out_size:
-            b_shared[pi, pj] = b_storage[k + pi, j]
+    for k in range(0, a_shape[-1], BLOCK_DIM):
+        if i < a_shape[-2] and (k + pj) < a_shape[-1]:
+            # Convert 2D indices to 1D for a_storage using strides
+            a_idx = batch * a_batch_stride + i * a_strides[-2] + (k + pj) * a_strides[-1]
+            a_shared[pi, pj] = a_storage[a_idx]
+        else:
+            a_shared[pi, pj] = 0
+        
+        if j < b_shape[-1] and (k + pi) < b_shape[-2]:
+            # Convert 2D indices to 1D for b_storage using strides
+            b_idx = batch * b_batch_stride + (k + pi) * b_strides[-2] + j * b_strides[-1]
+            b_shared[pi, pj] = b_storage[b_idx]
+        else:
+            b_shared[pi, pj] = 0
+        
         cuda.syncthreads()
 
-        for local_k in range(max(BLOCK_DIM, out_size - k)):
+        for local_k in range(BLOCK_DIM):
             acc += a_shared[pi, local_k] * b_shared[local_k, pj]
-    if i < out_size and j < out_size:
-        out[i, j] = acc
+        
+        cuda.syncthreads()
+    
+    if i < out_shape[-2] and j < out_shape[-1]:
+        # Convert 2D indices (i, j) into a 1D index for out
+        out_idx = batch * out_strides[0] + i * out_strides[-2] + j * out_strides[-1]
+        out[out_idx] = acc
 
 
 tensor_matrix_multiply = jit(_tensor_matrix_multiply)
