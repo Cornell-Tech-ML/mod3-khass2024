@@ -681,26 +681,30 @@ def _tensor_matrix_multiply(
     for k in range(0, a_shape[-1], BLOCK_DIM):
         if i < a_shape[-2] and (k + pj) < a_shape[-1]:
             # Convert 2D indices to 1D for a_storage using strides
-            a_idx = batch * a_batch_stride + i * a_strides[-2] + (k + pj) * a_strides[-1]
+            a_idx = (
+                batch * a_batch_stride + i * a_strides[-2] + (k + pj) * a_strides[-1]
+            )
             a_shared[pi, pj] = a_storage[a_idx]
         else:
             a_shared[pi, pj] = 0
-        
+
         if j < b_shape[-1] and (k + pi) < b_shape[-2]:
             # Convert 2D indices to 1D for b_storage using strides
-            b_idx = batch * b_batch_stride + (k + pi) * b_strides[-2] + j * b_strides[-1]
+            b_idx = (
+                batch * b_batch_stride + (k + pi) * b_strides[-2] + j * b_strides[-1]
+            )
             b_shared[pi, pj] = b_storage[b_idx]
         else:
             b_shared[pi, pj] = 0
-        
+
         cuda.syncthreads()
 
         effective_k = min(BLOCK_DIM, a_shape[-1] - k)  # Limit to remaining elements
         for local_k in range(effective_k):
             acc += a_shared[pi, local_k] * b_shared[local_k, pj]
-        
+
         cuda.syncthreads()
-    
+
     if i < out_shape[-2] and j < out_shape[-1]:
         # Convert 2D indices (i, j) into a 1D index for out
         out_idx = batch * out_strides[0] + i * out_strides[-2] + j * out_strides[-1]
