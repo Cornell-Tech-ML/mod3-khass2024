@@ -619,17 +619,17 @@ def _tensor_matrix_multiply(
     # # Batch dimension - fixed
     # batch = cuda.blockIdx.z
 
-    # BLOCK_DIM = 32
-    # a_shared = cuda.shared.array((BLOCK_DIM, BLOCK_DIM), numba.float64)
-    # b_shared = cuda.shared.array((BLOCK_DIM, BLOCK_DIM), numba.float64)
+    BLOCK_DIM = 32
+    a_shared = cuda.shared.array((BLOCK_DIM, BLOCK_DIM), numba.float64)
+    b_shared = cuda.shared.array((BLOCK_DIM, BLOCK_DIM), numba.float64)
 
-    # # The final position c[i, j]
-    # i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
-    # j = cuda.blockIdx.y * cuda.blockDim.y + cuda.threadIdx.y
+    # The final position c[i, j]
+    i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
+    j = cuda.blockIdx.y * cuda.blockDim.y + cuda.threadIdx.y
 
-    # # The local position in the block.
-    # pi = cuda.threadIdx.x
-    # pj = cuda.threadIdx.y
+    # The local position in the block.
+    pi = cuda.threadIdx.x
+    pj = cuda.threadIdx.y
 
     # Code Plan:
     # 1) Move across shared dimension by block dim.
@@ -637,7 +637,18 @@ def _tensor_matrix_multiply(
     #    b) Copy into shared memory for b matrix
     #    c) Compute the dot produce for position c[i, j]
     # TODO: Implement for Task 3.4.
-    raise NotImplementedError("Need to implement for Task 3.4")
+    acc = 0
+    for k in range(0, out_size, BLOCK_DIM):
+        if i < out_size and k + pj < out_size:
+            a_shared[pi, pj] = a_storage[i, k + pj]
+        if j < out_size and k + pi < out_size:
+            b_shared[pi, pj] = b_storage[k + pi, j]
+        cuda.syncthreads()
+
+        for local_k in range(max(BLOCK_DIM, out_size - k)):
+            acc += a_shared[pi, local_k] * b_shared[local_k, pj]
+    if i < out_size and j < out_size:
+        out[i, j] = acc
 
 
 tensor_matrix_multiply = jit(_tensor_matrix_multiply)
