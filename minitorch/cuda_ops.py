@@ -344,43 +344,28 @@ def _sum_practice(out: Storage, a: Storage, size: int) -> None:
         size (int):  length of a.
 
     """
-    # BLOCK_DIM = 32
+    BLOCK_DIM = 32
 
-    # cache = cuda.shared.array(BLOCK_DIM, numba.float64)
-    # i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
-    # pos = cuda.threadIdx.x
+    cache = cuda.shared.array(BLOCK_DIM, numba.float64)
+    i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
+    pos = cuda.threadIdx.x
 
     # TODO: Implement for Task 3.3.
-    # Number of threads per block
-    BLOCK_DIM = cuda.blockDim.x
-    # Thread index within the block
-    tid = cuda.threadIdx.x
-    # Compute global index
-    i = cuda.blockIdx.x * BLOCK_DIM + tid
-
-    # Allocate shared memory
-    cache = cuda.shared.array(THREADS_PER_BLOCK, numba.float64)
-
-    # Load input data into shared memory
+    # Load data into shared memory if within bounds
     if i < size:
-        cache[tid] = a[i]
+        cache[pos] = a[i]
     else:
-        cache[tid] = 0.0  # Zero padding for out-of-bounds
+        cache[pos] = 0.0  # Pad with zeros if outside bounds
 
-    # Synchronize before reduction
+    # Synchronize threads within the block
     cuda.syncthreads()
 
-    # Perform parallel reduction within the block
-    stride = BLOCK_DIM // 2
-    while stride > 0:
-        if tid < stride:
-            cache[tid] += cache[tid + stride]
-        cuda.syncthreads()
-        stride //= 2
-
-    # Write the result from the first thread of the block
-    if tid == 0:
-        out[cuda.blockIdx.x] = cache[0]
+    # Thread 0 performs the reduction
+    if pos == 0:
+        block_sum = 0.0
+        for j in range(BLOCK_DIM):
+            block_sum += cache[j]
+        out[cuda.blockIdx.x] = block_sum
 
 
 jit_sum_practice = cuda.jit()(_sum_practice)
@@ -446,68 +431,9 @@ def tensor_reduce(
         # pos = cuda.threadIdx.x
 
         # TODO: Implement for Task 3.3.
-        # Number of threads per block
-        BLOCK_DIM = cuda.blockDim.x
-        # Thread index
-        tid = cuda.threadIdx.x
-        # Allocate shared memory
-        cache = cuda.shared.array(THREADS_PER_BLOCK, numba.float64)
-        # Allocate local arrays for indices
-        out_index = cuda.local.array(MAX_DIMS, numba.int32)
-        a_index = cuda.local.array(MAX_DIMS, numba.int32)
+        raise NotImplementedError("Need to implement for Task 3.3")
 
-        # Compute the global index for the output element
-        i = cuda.blockIdx.x
-        if i >= out_size:
-            return
-
-        # Initialize cache and accumulator
-        cache[tid] = reduce_value
-        acc = reduce_value
-
-        # Get the multi-dimensional index for output
-        to_index(i, out_shape, out_index)
-
-        # Compute the size along the reduction dimension
-        reduce_size = a_shape[reduce_dim]
-
-        # Loop over the reduction dimension, each thread processes multiple elements
-        s = tid
-        while s < reduce_size:
-            # Prepare the index for input tensor
-            for d in range(len(a_shape)):
-                a_index[d] = out_index[d]
-            a_index[reduce_dim] = s
-
-            # Get the position in the input storage
-            a_pos = index_to_position(a_index, a_strides)
-
-            # Accumulate the result
-            acc = fn(acc, a_storage[a_pos])
-
-            # Move to the next element
-            s += BLOCK_DIM
-
-        # Store the result in shared memory
-        cache[tid] = acc
-
-        # Synchronize before reduction in shared memory
-        cuda.syncthreads()
-
-        # Perform parallel reduction within the block
-        stride = BLOCK_DIM // 2
-        while stride > 0:
-            if tid < stride:
-                cache[tid] = fn(cache[tid], cache[tid + stride])
-            cuda.syncthreads()
-            stride //= 2
-
-        # Write the result from the first thread of the block
-        if tid == 0:
-            out_pos = index_to_position(out_index, out_strides)
-            out[out_pos] = cache[0]
-
-    return cuda.jit()(_reduce)  # type: ignore
+    return jit(_reduce)  # type: ignore
 
 
 def _mm_practice(out: Storage, a: Storage, b: Storage, size: int) -> None:
