@@ -655,7 +655,8 @@ def _tensor_matrix_multiply(
         
         cuda.syncthreads()
 
-        for local_k in range(BLOCK_DIM):
+        effective_k = min(BLOCK_DIM, a_shape[-1] - k)  # Limit to remaining elements
+        for local_k in range(effective_k):
             acc += a_shared[pi, local_k] * b_shared[local_k, pj]
         
         cuda.syncthreads()
