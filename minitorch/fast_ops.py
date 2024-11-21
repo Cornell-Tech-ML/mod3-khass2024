@@ -300,9 +300,9 @@ def tensor_reduce(
             reduce_stride = a_strides[reduce_dim]
 
             # Inner loop only does computation, no function calls
-            acc = out[o]
+            acc = float(out[o])
             for s in range(reduce_size):
-                acc = fn(acc, a_storage[base_position + s * reduce_stride])
+                acc = fn(acc, float(a_storage[base_position + s * reduce_stride]))
             out[o] = acc
 
     return njit(_reduce, parallel=True)  # type: ignore
