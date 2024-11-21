@@ -654,58 +654,45 @@ def _tensor_matrix_multiply(
     Returns:
         None : Fills in `out`
     """
-    # Commented out for now to avoid style issues
     a_batch_stride = a_strides[0] if len(a_shape) > 2 and a_shape[0] > 1 else 0
     b_batch_stride = b_strides[0] if len(b_shape) > 2 and b_shape[0] > 1 else 0
-    # # Batch dimension - fixed
+
     batch = cuda.blockIdx.z
 
-    BLOCK_DIM = 16 # Reduced from 32 to 16
-    a_shared = cuda.shared.array((BLOCK_DIM, BLOCK_DIM), numba.float64)
-    b_shared = cuda.shared.array((BLOCK_DIM, BLOCK_DIM), numba.float64)
+    BLOCK_DIM = 16  # Reduced from 32 to 16
+    a_shared = cuda.shared.array((BLOCK_DIM, BLOCK_DIM), numba.float32)  # Use float32
+    b_shared = cuda.shared.array((BLOCK_DIM, BLOCK_DIM), numba.float32)
 
-    # The final position c[i, j]
     i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
     j = cuda.blockIdx.y * cuda.blockDim.y + cuda.threadIdx.y
 
-    # The local position in the block.
     pi = cuda.threadIdx.x
     pj = cuda.threadIdx.y
 
-    # Code Plan:
-    # 1) Move across shared dimension by block dim.
-    #    a) Copy into shared memory for a matrix.
-    #    b) Copy into shared memory for b matrix
-    #    c) Compute the dot produce for position c[i, j]
-    # TODO: Implement for Task 3.4.
-    acc = 0
+    acc = 0.0  # Ensure this is float32
     for k in range(0, a_shape[-1], BLOCK_DIM):
         if i < a_shape[-2] and (k + pj) < a_shape[-1]:
-            # Convert 2D indices to 1D for a_storage using strides
             a_idx = batch * a_batch_stride + i * a_strides[-2] + (k + pj) * a_strides[-1]
             a_shared[pi, pj] = a_storage[a_idx]
         else:
-            a_shared[pi, pj] = 0
-        
+            a_shared[pi, pj] = 0.0
+
         if j < b_shape[-1] and (k + pi) < b_shape[-2]:
-            # Convert 2D indices to 1D for b_storage using strides
             b_idx = batch * b_batch_stride + (k + pi) * b_strides[-2] + j * b_strides[-1]
             b_shared[pi, pj] = b_storage[b_idx]
         else:
-            b_shared[pi, pj] = 0
-        
+            b_shared[pi, pj] = 0.0
+
         cuda.syncthreads()
 
-        effective_k = min(BLOCK_DIM, a_shape[-1] - k)  # Limit to remaining elements
+        effective_k = min(BLOCK_DIM, a_shape[-1] - k)
         for local_k in range(effective_k):
             acc += a_shared[pi, local_k] * b_shared[local_k, pj]
-        
+
         cuda.syncthreads()
-    
+
     if i < out_shape[-2] and j < out_shape[-1]:
-        # Convert 2D indices (i, j) into a 1D index for out
         out_idx = batch * out_strides[0] + i * out_strides[-2] + j * out_strides[-1]
         out[out_idx] = acc
-
 
 tensor_matrix_multiply = jit(_tensor_matrix_multiply)
