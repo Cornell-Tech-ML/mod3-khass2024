@@ -549,9 +549,50 @@ def _mm_practice(out: Storage, a: Storage, b: Storage, size: int) -> None:
 
     """
     # Commented out for now to avoid style issues
-    # BLOCK_DIM = 32
+    BLOCK_DIM = 32
     # TODO: Implement for Task 3.3.
-    raise NotImplementedError("Need to implement for Task 3.3")
+    # Define the shared memory arrays for a and b
+    shared_a = cuda.shared.array((BLOCK_DIM, BLOCK_DIM), numba.float32)
+    shared_b = cuda.shared.array((BLOCK_DIM, BLOCK_DIM), numba.float32)
+
+    # Thread and block indices
+    tx = cuda.threadIdx.x
+    ty = cuda.threadIdx.y
+
+    # Compute global row and column for the output
+    row = cuda.blockIdx.y * cuda.blockDim.y + ty
+    col = cuda.blockIdx.x * cuda.blockDim.x + tx
+
+    # Accumulator for the result
+    acc = 0.0
+
+    # Loop over the shared dimension in blocks of `BLOCK_DIM`
+    for k in range(0, size, BLOCK_DIM):
+        # Load elements of `a` into shared memory
+        if row < size and (k + tx) < size:
+            shared_a[ty, tx] = a[row * size + (k + tx)]
+        else:
+            shared_a[ty, tx] = 0.0
+
+        # Load elements of `b` into shared memory
+        if col < size and (k + ty) < size:
+            shared_b[ty, tx] = b[(k + ty) * size + col]
+        else:
+            shared_b[ty, tx] = 0.0
+
+        # Synchronize threads to ensure shared memory is fully loaded
+        cuda.syncthreads()
+
+        # Perform partial dot product for this block
+        for n in range(BLOCK_DIM):
+            acc += shared_a[ty, n] * shared_b[n, tx]
+
+        # Synchronize again before the next block
+        cuda.syncthreads()
+
+    # Write the result to the output matrix if within bounds
+    if row < size and col < size:
+        out[row * size + col] = acc
 
 
 jit_mm_practice = jit(_mm_practice)
