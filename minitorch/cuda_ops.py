@@ -230,7 +230,6 @@ def tensor_map(
         Tensor map function.
 
     """
-    cufn = device_jit(fn)
 
     def _map(
         out: Storage,
@@ -243,15 +242,14 @@ def tensor_map(
     ) -> None:
         out_index = cuda.local.array(MAX_DIMS, numba.int32)
         in_index = cuda.local.array(MAX_DIMS, numba.int32)
-        # i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
+        i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
         # TODO: Implement for Task 3.3.
-        idx = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
 
-        if idx >= out_size:
+        if i >= out_size:
             return
 
         # Convert the linear index to multi-dimensional index
-        to_index(idx, out_shape, out_index)
+        to_index(i, out_shape, out_index)
 
         # Adjust indices for broadcasting
         broadcast_index(out_index, out_shape, in_shape, in_index)
@@ -261,7 +259,7 @@ def tensor_map(
         in_pos = index_to_position(in_index, in_strides)
 
         # Apply the function and store the result
-        out[out_pos] = cufn(in_storage[in_pos])
+        out[out_pos] = fn(in_storage[in_pos])
 
     return cuda.jit()(_map)  # type: ignore
 
@@ -285,7 +283,6 @@ def tensor_zip(
         Tensor zip function.
 
     """
-    cufn = device_jit(fn)
 
     def _zip(
         out: Storage,
@@ -302,17 +299,14 @@ def tensor_zip(
         out_index = cuda.local.array(MAX_DIMS, numba.int32)
         a_index = cuda.local.array(MAX_DIMS, numba.int32)
         b_index = cuda.local.array(MAX_DIMS, numba.int32)
-        # i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
+        i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
 
         # TODO: Implement for Task 3.3.
-        # Compute the global thread index
-        idx = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
-
-        if idx >= out_size:
+        if i >= out_size:
             return
 
         # Convert the linear index to multi-dimensional index for output
-        to_index(idx, out_shape, out_index)
+        to_index(i, out_shape, out_index)
 
         # Adjust indices for broadcasting
         broadcast_index(out_index, out_shape, a_shape, a_index)
@@ -324,7 +318,7 @@ def tensor_zip(
         b_pos = index_to_position(b_index, b_strides)
 
         # Apply the function and store the result
-        out[out_pos] = cufn(a_storage[a_pos], b_storage[b_pos])
+        out[out_pos] = fn(a_storage[a_pos], b_storage[b_pos])
 
     return cuda.jit()(_zip)  # type: ignore
 
@@ -433,7 +427,6 @@ def tensor_reduce(
         Tensor reduce function.
 
     """
-    cufn = device_jit(fn)
 
     def _reduce(
         out: Storage,
@@ -490,7 +483,7 @@ def tensor_reduce(
             a_pos = index_to_position(a_index, a_strides)
 
             # Accumulate the result
-            acc = cufn(acc, a_storage[a_pos])
+            acc = fn(acc, a_storage[a_pos])
 
             # Move to the next element
             s += BLOCK_DIM
@@ -505,7 +498,7 @@ def tensor_reduce(
         stride = BLOCK_DIM // 2
         while stride > 0:
             if tid < stride:
-                cache[tid] = cufn(cache[tid], cache[tid + stride])
+                cache[tid] = fn(cache[tid], cache[tid + stride])
             cuda.syncthreads()
             stride //= 2
 
