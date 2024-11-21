@@ -614,8 +614,8 @@ def _tensor_matrix_multiply(
         None : Fills in `out`
     """
     # Commented out for now to avoid style issues
-    a_batch_stride = a_strides[0] if a_shape[0] > 1 else 0
-    b_batch_stride = b_strides[0] if b_shape[0] > 1 else 0
+    a_batch_stride = a_strides[0] if len(a_shape) > 2 and a_shape[0] > 1 else 0
+    b_batch_stride = b_strides[0] if len(b_shape) > 2 and b_shape[0] > 1 else 0
     # # Batch dimension - fixed
     batch = cuda.blockIdx.z
 
