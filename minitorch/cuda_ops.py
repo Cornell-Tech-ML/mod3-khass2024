@@ -424,16 +424,49 @@ def tensor_reduce(
         reduce_dim: int,
         reduce_value: float,
     ) -> None:
-        # BLOCK_DIM = 1024
-        # cache = cuda.shared.array(BLOCK_DIM, numba.float64)
-        # out_index = cuda.local.array(MAX_DIMS, numba.int32)
-        # out_pos = cuda.blockIdx.x
-        # pos = cuda.threadIdx.x
+        BLOCK_DIM = 1024
+        cache = cuda.shared.array(BLOCK_DIM, numba.float64)
+        out_index = cuda.local.array(MAX_DIMS, numba.int32)
+        out_pos = cuda.blockIdx.x
+        pos = cuda.threadIdx.x
 
         # TODO: Implement for Task 3.3.
-        raise NotImplementedError("Need to implement for Task 3.3")
+        # Calculate the logical output position
+        to_index(out_pos, out_shape, out_index)
 
-    return jit(_reduce)  # type: ignore
+        # Identify the range of elements to reduce
+        reduce_size = a_shape[reduce_dim]
+        reduce_stride = a_strides[reduce_dim]
+
+        # Calculate the base position for the current output index
+        base_pos = index_to_position(out_index, out_strides)
+
+        # Thread-local position in reduction dimension
+        reduce_pos = pos
+
+        # Initialize reduction result
+        if reduce_pos < reduce_size:
+            a_pos = base_pos + reduce_pos * reduce_stride
+            cache[pos] = a_storage[a_pos]
+        else:
+            cache[pos] = reduce_value
+
+        # Synchronize threads to ensure shared memory is fully loaded
+        cuda.syncthreads()
+
+        # Perform the reduction using the binary function
+        stride = 1
+        while stride < BLOCK_DIM:
+            if (reduce_pos % (2 * stride)) == 0 and (reduce_pos + stride) < BLOCK_DIM:
+                cache[pos] = fn(cache[pos], cache[pos + stride])
+            stride *= 2
+            cuda.syncthreads()
+
+        # Thread 0 writes the result for the block
+        if pos == 0:
+            out[base_pos] = cache[0]
+
+    return cuda.jit(_reduce)  # type: ignore
 
 
 def _mm_practice(out: Storage, a: Storage, b: Storage, size: int) -> None:
