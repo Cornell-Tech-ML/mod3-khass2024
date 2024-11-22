@@ -431,30 +431,43 @@ def tensor_reduce(
         pos = cuda.threadIdx.x
 
         # TODO: Implement for Task 3.3.
-        # Calculate the multi-dimensional index for the output tensor
+        # Calculate the size of the reduce dimension and other dimensions
+        reduce_size = a_shape[reduce_dim]
+        out_reduce_size = out_shape[reduce_dim] if reduce_dim < len(out_shape) else 1
+        out_other_size = out_size // out_reduce_size
+
+        # Calculate which slice of the reduction dimension this block is handling
+        reduce_block = out_pos // out_other_size
+
+        # Get the base index for the output position
         to_index(out_pos, out_shape, out_index)
 
-        # Correctly index into the reduced dimension
-        out_index[reduce_dim] = cuda.blockIdx.x * BLOCK_DIM + pos
+        # Calculate the position in the reduction dimension for this thread
+        reduce_idx = reduce_block * BLOCK_DIM + pos
 
-        # Check if thread's index is valid, otherwise use `reduce_value`
-        if out_index[reduce_dim] < a_shape[reduce_dim]:
+        # Initialize cache with reduce_value
+        cache[pos] = reduce_value
+
+        if reduce_idx < reduce_size:
+            # Set the reduction dimension index
+            out_index[reduce_dim] = reduce_idx
+            # Get the position in the input storage
             a_pos = index_to_position(out_index, a_strides)
+            # Load the value into cache
             cache[pos] = a_storage[a_pos]
-        else:
-            cache[pos] = reduce_value
 
-        # Synchronize threads to ensure all cache writes are complete
+        # Ensure all threads have loaded their values
         cuda.syncthreads()
 
-        # Perform reduction using only thread 0 in the block
+        # Only thread 0 performs the reduction
         if pos == 0:
             tmp = reduce_value
-            reduce_size = min(
-                BLOCK_DIM, a_shape[reduce_dim] - BLOCK_DIM * cuda.blockIdx.x
-            )
-            for i in range(reduce_size):
+            # Calculate how many valid elements we have in this block
+            valid_elements = min(BLOCK_DIM, reduce_size - reduce_block * BLOCK_DIM)
+            # Reduce all valid elements
+            for i in range(valid_elements):
                 tmp = fn(tmp, cache[i])
+            # Store the result
             out[out_pos] = tmp
 
     return cuda.jit(_reduce)  # type: ignore
