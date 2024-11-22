@@ -633,36 +633,59 @@ def _tensor_matrix_multiply(
     #    b) Copy into shared memory for b matrix
     #    c) Compute the dot produce for position c[i, j]
     # TODO: Implement for Task 3.4.
+    # Initialize accumulator for dot product result
     acc = 0
+
+    # Iterate over the shared dimension in blocks of size BLOCK_DIM
     for k in range(0, a_shape[-1], BLOCK_DIM):
+        # Load block from matrix A into shared memory
         if i < a_shape[-2] and (k + pj) < a_shape[-1]:
-            # Convert 2D indices to 1D for a_storage using strides
+            # Calculate 1D index for matrix A:
+            # - batch * a_batch_stride handles the batch dimension offset
+            # - i * a_strides[-2] moves to the correct row
+            # - (k + pj) * a_strides[-1] moves to the correct column
             a_idx = (
                 batch * a_batch_stride + i * a_strides[-2] + (k + pj) * a_strides[-1]
             )
             a_shared[pi, pj] = a_storage[a_idx]
         else:
+            # If outside matrix bounds, pad with zeros
             a_shared[pi, pj] = 0
 
+        # Load block from matrix B into shared memory
         if j < b_shape[-1] and (k + pi) < b_shape[-2]:
-            # Convert 2D indices to 1D for b_storage using strides
+            # Calculate 1D index for matrix B:
+            # - batch * b_batch_stride handles the batch dimension offset
+            # - (k + pi) * b_strides[-2] moves to the correct row
+            # - j * b_strides[-1] moves to the correct column
             b_idx = (
                 batch * b_batch_stride + (k + pi) * b_strides[-2] + j * b_strides[-1]
             )
             b_shared[pi, pj] = b_storage[b_idx]
         else:
+            # If outside matrix bounds, pad with zeros
             b_shared[pi, pj] = 0
 
+        # Ensure all threads have loaded their data before computing
         cuda.syncthreads()
 
-        effective_k = min(BLOCK_DIM, a_shape[-1] - k)  # Limit to remaining elements
+        # Calculate how many elements we can actually use in this block
+        # This handles the case where the last block may be smaller
+        effective_k = min(BLOCK_DIM, a_shape[-1] - k)
+
+        # Compute dot product for this block
         for local_k in range(effective_k):
             acc += a_shared[pi, local_k] * b_shared[local_k, pj]
 
+        # Ensure all computations are done before loading next block
         cuda.syncthreads()
 
+    # Write result to global memory if within output matrix bounds
     if i < out_shape[-2] and j < out_shape[-1]:
-        # Convert 2D indices (i, j) into a 1D index for out
+        # Calculate 1D index for output:
+        # - batch * out_strides[0] handles the batch dimension offset
+        # - i * out_strides[-2] moves to the correct row
+        # - j * out_strides[-1] moves to the correct column
         out_idx = batch * out_strides[0] + i * out_strides[-2] + j * out_strides[-1]
         out[out_idx] = acc
 
