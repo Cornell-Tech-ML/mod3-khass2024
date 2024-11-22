@@ -33,6 +33,6 @@ The files that will be synced are:
 
 ## Performance Comparison: GPU vs Fast
 
-The following graph illustrates the speed-ups on large matrix operations that CUDA matrix multiplication and reduction has over naive operations.
+The following graph illustrates the speed-ups on large matrix operations that CUDA matrix multiplication has over naive operations.
 
 ![Performance graph: GPU vs Fast](graphs/gpu_vs_fast.png)
