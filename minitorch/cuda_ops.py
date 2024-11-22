@@ -431,40 +431,31 @@ def tensor_reduce(
         pos = cuda.threadIdx.x
 
         # TODO: Implement for Task 3.3.
-        # Calculate the logical output position
+        # Calculate the multi-dimensional index for the output tensor
         to_index(out_pos, out_shape, out_index)
 
-        # Identify the range of elements to reduce
-        reduce_size = a_shape[reduce_dim]
-        reduce_stride = a_strides[reduce_dim]
+        # Correctly index into the reduced dimension
+        out_index[reduce_dim] = cuda.blockIdx.x * BLOCK_DIM + pos
 
-        # Calculate the base position for the current output index
-        base_pos = index_to_position(out_index, out_strides)
-
-        # Thread-local position in reduction dimension
-        reduce_pos = pos
-
-        # Initialize reduction result
-        if reduce_pos < reduce_size:
-            a_pos = base_pos + reduce_pos * reduce_stride
+        # Check if thread's index is valid, otherwise use `reduce_value`
+        if out_index[reduce_dim] < a_shape[reduce_dim]:
+            a_pos = index_to_position(out_index, a_strides)
             cache[pos] = a_storage[a_pos]
         else:
             cache[pos] = reduce_value
 
-        # Synchronize threads to ensure shared memory is fully loaded
+        # Synchronize threads to ensure all cache writes are complete
         cuda.syncthreads()
 
-        # Perform the reduction using the binary function
-        stride = 1
-        while stride < BLOCK_DIM:
-            if (reduce_pos % (2 * stride)) == 0 and (reduce_pos + stride) < BLOCK_DIM:
-                cache[pos] = fn(cache[pos], cache[pos + stride])
-            stride *= 2
-            cuda.syncthreads()
-
-        # Thread 0 writes the result for the block
+        # Perform reduction using only thread 0 in the block
         if pos == 0:
-            out[base_pos] = cache[0]
+            tmp = reduce_value
+            reduce_size = min(
+                BLOCK_DIM, a_shape[reduce_dim] - BLOCK_DIM * cuda.blockIdx.x
+            )
+            for i in range(reduce_size):
+                tmp = fn(tmp, cache[i])
+            out[out_pos] = tmp
 
     return cuda.jit(_reduce)  # type: ignore
 
